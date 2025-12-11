@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
 using WebApiCredits.Models;
+using WebApiCredits.Models.Enums;
 
 namespace WebApiCredits.DAL
 {
@@ -10,54 +11,66 @@ namespace WebApiCredits.DAL
 
         public async Task<IEnumerable<Credit>> GetAllCreditsWithInvoicesAsync()
         {
-            var sql = @"
-                SELECT c.*, i.Id, i.InvoiceNumber, i.Amount, i.CreditId 
-                FROM Credits c
-                LEFT JOIN Invoices i ON c.Id = i.CreditId
-                ORDER BY c.Id, i.Id";
+            const string sql = @"
+            SELECT
+                c.Id,
+                c.CreditNumber,
+                c.CustomerName,
+                c.RequestedAmount,
+                c.RequestDate,
+                c.Status,
+                i.Id AS InvoiceId,
+                i.InvoiceNumber,
+                i.Amount,
+                i.CreditId
+            FROM Credits c
+            LEFT JOIN Invoices i ON c.Id = i.CreditId
+            ORDER BY c.Id, i.Id";
 
-            Dictionary<int, Credit> creditDictionary = [];
+            var dict = new Dictionary<int, Credit>();
 
             await _connection.QueryAsync<Credit, Invoice, Credit>(
                 sql,
                 (credit, invoice) =>
                 {
-                    if (!creditDictionary.TryGetValue(credit.Id, out var creditEntry))
+                    if (!dict.TryGetValue(credit.Id, out var entry))
                     {
-                        creditEntry = credit;
-                        creditEntry.Invoices = new List<Invoice>();
-                        creditDictionary.Add(creditEntry.Id, creditEntry);
+                        entry = credit;
+                        entry.Invoices = new List<Invoice>();
+                        dict.Add(entry.Id, entry);
                     }
 
-                    if (invoice != null && invoice.Id > 0)
+                    if (invoice is not null && invoice.InvoiceId > 0)
                     {
-                        creditEntry.Invoices.Add(invoice);
+                        invoice.Id = invoice.InvoiceId; // copy alias into Id
+                        entry.Invoices.Add(invoice);
                     }
 
-                    return creditEntry;
+                    return entry;
                 },
-                splitOn: "Id"  
+                splitOn: "InvoiceId"
             );
 
-            return creditDictionary.Values;
+            return dict.Values.OrderBy(c => c.Id).ToList();
         }
 
         public async Task<CreditSummary> GetCreditSummaryAsync()
         {
-            var sql = @"
-                SELECT 
-                    SUM(CASE WHEN Status = 2 THEN RequestedAmount ELSE 0 END) as TotalPaidAmount,
-                    SUM(CASE WHEN Status = 1 THEN RequestedAmount ELSE 0 END) as TotalAwaitingPaymentAmount,
-                    SUM(RequestedAmount) as TotalAmount
-                FROM Credits 
-                WHERE Status IN (1, 2)";
+            var paid = (int)CreditStatus.Paid;
+            var awaiting = (int)CreditStatus.AwaitingPayment;
 
-            var result = await _connection.QueryFirstOrDefaultAsync<dynamic>(sql);
+            const string sql = @"
+            SELECT 
+                SUM(CASE WHEN Status = @paid THEN RequestedAmount ELSE 0 END) as TotalPaidAmount,
+                SUM(CASE WHEN Status = @awaiting THEN RequestedAmount ELSE 0 END) as TotalAwaitingPaymentAmount,
+                SUM(RequestedAmount) as TotalAmount
+            FROM Credits 
+            WHERE Status IN (@awaiting, @paid)";
+
+            var result = await _connection.QueryFirstOrDefaultAsync<dynamic>(sql, new { paid, awaiting });
 
             if (result == null || result.TotalAmount == null || result.TotalAmount == 0)
-            {
                 return new CreditSummary();
-            }
 
             decimal totalPaid = result.TotalPaidAmount ?? 0;
             decimal totalAwaiting = result.TotalAwaitingPaymentAmount ?? 0;

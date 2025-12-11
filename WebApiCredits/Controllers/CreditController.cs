@@ -10,7 +10,7 @@ namespace WebApiCredits.Controllers
     {
         private readonly ICreditRepository _repository = repository;
 
-        [HttpGet("all")]
+        [HttpGet]
         public async Task<ActionResult<IEnumerable<Credit>>> GetAllCredits()
         {
             IEnumerable<Credit> credits;
