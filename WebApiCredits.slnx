@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="WebApiCredits.Tests/WebApiCredits.Tests.csproj" />
+  <Project Path="WebApiCredits/WebApiCredits.csproj" />
+</Solution>

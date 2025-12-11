@@ -1,0 +1,9 @@
+﻿@WebApiCredits_HostAddress = http://localhost:5130
+
+### 1. Get all credits with invoices
+GET {{WebApiCredits_HostAddress}}/api/credit/all
+Accept: application/json
+
+### 2. Get credit summary
+GET {{WebApiCredits_HostAddress}}/api/credit/summary
+Accept: application/json
